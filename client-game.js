@@ -84,10 +84,13 @@ var ballParams = {
 
 
 var GameState = function() {
+    this.inited = false;
 	this.p1 = new GameObj(p1Params);
 	this.p2 = new GameObj(p2Params);
 	this.p1score = 0;
 	this.p2score = 0;
+    this.p1ready = false;
+    this.p2ready = false;
 	this.ball = new GameObj(ballParams);
 	this.draw = function() {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -103,12 +106,19 @@ var GameState = function() {
 		this.p1.updatePos(dt);
 		this.p2.updatePos(dt);
 	};
-	this.drawScore = function() {	
+	this.drawScore = function(winner) {	
+        if(winner == "p1") {
+            this.socket.emit('send', {receiver: '0', info: "<h1>YOU WON</h1><br />You have won " + this.p1score + " / " + (this.p1score + this.p2score) + " games so far"});
+            this.socket.emit('send', {receiver: '1', info: "<h1>YOU LOST</h1><br />You have won " + this.p2score + " / " + (this.p1score + this.p2score) + " games so far"});
+        } else {
+            this.socket.emit('send', {receiver: '1', info: "<h1>YOU WON</h1><br />You have won " + this.p2score + " / " + (this.p1score + this.p2score) + " games so far"});
+            this.socket.emit('send', {receiver: '0', info: "<h1>YOU LOST</h1><br />You have won " + this.p1score + " / " + (this.p1score + this.p2score) + " games so far"});
+        }
 		console.log(this.p1score, this.p2score);
 	};
 	this.resetGame = function(winner) {
 		this[winner+'score']++;
-		this.drawScore();
+		this.drawScore(winner);
 		clearInterval(this.gameInterval);
 		var that = this;
 		setTimeout(function() {
@@ -140,9 +150,9 @@ var GameState = function() {
 		this.ball.setVelocity(dirX, dirY);
 	}
 	this.init = function() {
+        this.inited = true;
 		this.p1score = 0;
 		this.p2score = 0;
-		canvas.addEventListener('keydown', onKeyDown, false);
 		canvas.setAttribute('tabindex','0');
 		canvas.focus();
 		this.startGame();
@@ -158,24 +168,43 @@ var GameState = function() {
 	};
 }
 
-
-
-function onKeyDown(event) {
-	switch(event.keyCode) {
-		case 38:
-			game.p2.setVelocity(0, -80);
-			break;
-		case 40:
-			game.p2.setVelocity(0, 80);
-			break;
-		case 87:
-			game.p1.setVelocity(0, -80);
-			break;
-		case 83:
-			game.p1.setVelocity(0, 80);
-			break;
-	}
-}
-
 var game = new GameState();
-game.init();
+// Make a connection to the socket.io server
+// This also fires the "connection" event, but it doesn't matter
+var socket = io.connect('http://192.168.0.188:3000/');
+game.socket = socket;
+
+// When getting a "receive" event from the server
+socket.on('receive', function(data) {
+    console.log(data);
+    if(data.receiver !== "host") {
+        return;
+    }
+    if(data.init === true && !game.inited) {
+        switch(data.player) {
+            case "0":
+                game.p1ready = true;
+                break;
+            case "1":
+                game.p2ready = true;
+                break;
+        }
+        if(game.p1ready && game.p2ready) {
+            game.init();
+        }
+    } else {
+        if(data.player == "0" && data.direction == "up") {
+            game.p1.setVelocity(0, 80);
+        } else if(data.player == "0" && data.direction == "down") {
+            game.p1.setVelocity(0, -80);
+        } else if(data.player == "0" && data.direction == "none") {
+            game.p1.setVelocity(0, 0);
+        } else if(data.player == "1" && data.direction == "up") {
+            game.p2.setVelocity(0, 80);
+        } else if(data.player == "1" && data.direction == "down") {
+            game.p2.setVelocity(0, -80);
+        } else if(data.player == "1" && data.direction == "none") {
+            game.p2.setVelocity(0, 0);
+        }
+    }
+});

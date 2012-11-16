@@ -1,27 +1,37 @@
 var Game = new function() {
     this.accelerometer = new Accelerometer();
     this.accelerometer.startListening();
+    this.lastDirection = "none";
+    this.direction = "none";
     this.update = function() {
         this.lastAccel = this.accelerometer.getLast();
         if(this.lastAccel.y < -1.0) {
-            this.socket.emit('send', {player: getUser(), direction: 'down'});
-            console.log('sent down');
+            this.direction = "down";
         } else if(this.lastAccel.y > 1.0) {
-            this.socket.emit('send', {player: getUser(), direction: 'up'});
-            console.log('sent up');
+            this.direction = "up";
+        } else {
+            this.direction = "none";
         }
-        $('#game-alert').html(this.lastAccel.y);
+        if(this.direction != this.lastDirection) {
+            this.socket.emit('send', {receiver: "host", player: getUser(), direction: this.direction});
+        }
+        this.lastDirection = this.direction;
     }
     this.init = function() {
         // Make a connection to the socket.io server
         // This fires the "connection" event!!
-        this.socket = io.connect('http://localhost:3000/');
+        this.socket = io.connect('http://192.168.0.188:3000/');
         setInterval(this.update.bind(this), 100);
         this.socket.on('receive', function(data) {
-            // update the DOM with received data
-            $('#game-alert').html(data.info);
+            if(data.receiver === getUser()) {
+                $('#game-alert').stop();
+                $('#game-alert').fadeIn();
+                // update the DOM with received data
+                $('#game-alert').html(data.info);
+                $('#game-alert').fadeOut(5000);
+            }
         });
-        this.socket.emit('send', {player: getUser(), init: true});
+        this.socket.emit('send', {receiver: "host", player: getUser(), init: true});
     }
 }
 
